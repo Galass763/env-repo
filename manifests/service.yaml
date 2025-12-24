@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-demo
+  labels:
+    app: nginx-demo
+    environment: production
+    owner: team-platform
+    version: v1.0.0
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-demo
+  ports:
+  - port: 80
+    targetPort: 80
