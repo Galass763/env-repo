@@ -1,3 +1,4 @@
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,9 +26,9 @@ spec:
         runAsUser: 1000
       containers:
       - name: nginx
-        image: nginx:1.21
+        image: nginxinc/nginx-unprivileged:1.21
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         resources:
           requests:
             memory: "64Mi"
@@ -35,3 +36,4 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "100m"
+
