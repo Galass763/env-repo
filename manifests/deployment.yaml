@@ -2,34 +2,32 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nginx-demo
-  namespace: production
   labels:
-    app: nginx
+    app: nginx-demo
     environment: production
-    owner: team
+    owner: team-platform
     version: v1.0.0
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      app: nginx
+      app: nginx-demo
   template:
     metadata:
       labels:
-        app: nginx
+        app: nginx-demo
         environment: production
-        owner: team
+        owner: team-platform
         version: v1.0.0
     spec:
-      securityContext:          # niveau pod
+      securityContext:
         runAsNonRoot: true
         runAsUser: 1000
       containers:
       - name: nginx
-        image: nginx:1.21
-        securityContext:        # niveau conteneur
-          runAsNonRoot: true
-          runAsUser: 1000
+        image: nginxinc/nginx-unprivileged:1.21
+        ports:
+        - containerPort: 8080
         resources:
           requests:
             memory: "64Mi"
@@ -37,4 +35,15 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "100m"
-
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
