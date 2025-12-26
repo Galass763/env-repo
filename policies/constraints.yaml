@@ -4,6 +4,7 @@ kind: K8sBlockLatestImages
 metadata:
   name: block-latest-images
 spec:
+  enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: ["apps"]
@@ -15,6 +16,7 @@ kind: K8sRequiredLabels
 metadata:
   name: require-labels
 spec:
+  enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: ["apps"]
@@ -32,6 +34,7 @@ kind: K8sRequiredResources
 metadata:
   name: require-resources
 spec:
+  enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: ["apps"]
@@ -43,6 +46,7 @@ kind: K8sBlockRootUser
 metadata:
   name: block-root-user
 spec:
+  enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: ["apps"]
@@ -54,6 +58,7 @@ kind: K8sBlockNodePort
 metadata:
   name: block-nodeport
 spec:
+  enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: [""]
