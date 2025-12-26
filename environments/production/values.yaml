@@ -22,6 +22,8 @@ labels:
   app: myapp
   environment: production
   owner: team-platform
-  version: v1.0.0 securityContext:
+  version: v1.0.0
+
+ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
