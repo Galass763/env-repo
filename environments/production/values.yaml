@@ -24,6 +24,7 @@ labels:
   owner: team-platform
   version: v1.0.0
 
- securityContext:
+securityContext:
   runAsNonRoot: true
   runAsUser: 1000
+
