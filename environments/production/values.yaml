@@ -1,0 +1,27 @@
+replicaCount: 2
+
+image:
+  repository: nginxinc/nginx-unprivileged
+  tag: "1.21"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+labels:
+  app: myapp
+  environment: production
+  owner: team-platform
+  version: v1.0.0 securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
