@@ -15,9 +15,9 @@ spec:
       default: main
   steps:
     - name: clone
-      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:latest
+      image: bitnami/git:latest
       script: |
-        #!/bin/sh
+        #!/bin/bash
         set -e
         echo "Cloning repository: $(params.url)"
         git clone $(params.url) $(workspaces.output.path)/source
@@ -46,9 +46,9 @@ spec:
       description: Workspace où cloner le code
   steps:
     - name: clone
-      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:latest
+      image: bitnami/git:latest
       script: |
-        #!/bin/sh
+        #!/bin/bash
         set -e
         echo "Cloning repository: $(params.url)"
         echo "Revision: $(params.revision)"
@@ -74,9 +74,6 @@ spec:
     - name: DOCKERFILE
       type: string
       default: Dockerfile
-    - name: CONTEXT
-      type: string
-      default: .
   workspaces:
     - name: source
   steps:
@@ -92,6 +89,8 @@ spec:
         - --cache=true
         - --cache-ttl=24h
         - --skip-tls-verify
+        - --insecure
+        - --insecure-pull
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Task
@@ -103,10 +102,8 @@ spec:
   params:
     - name: IMAGE
       type: string
-      description: Nouvelle image à déployer
     - name: GIT_REPO
       type: string
-      description: URL du repository env-repo
     - name: GIT_EMAIL
       type: string
       default: tekton@example.com
@@ -116,7 +113,6 @@ spec:
     - name: MANIFEST_PATH
       type: string
       default: manifests/deployment.yaml
-      description: Chemin vers le manifest à modifier
   workspaces:
     - name: source
   steps:
@@ -142,12 +138,12 @@ spec:
         
         echo "💾 Committing changes..."
         git add .
-        git commit -m "🚀 Update image to $(params.IMAGE)" || echo "No changes to commit"
+        git commit -m "Update image to $(params.IMAGE)" || echo "No changes"
         
         echo "⬆️  Pushing to main..."
-        git push origin main || echo "Push failed - may need authentication"
+        git push origin main || echo "Push may need auth"
         
-        echo "✅ Manifest updated successfully!"
+        echo "✅ Done!"
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Task
@@ -187,24 +183,18 @@ spec:
   params:
     - name: APP_REPO
       type: string
-      description: URL du repository de code source
     - name: ENV_REPO
       type: string
-      description: URL du repository de manifests
     - name: IMAGE_NAME
       type: string
-      description: Nom de l'image Docker (sans tag)
     - name: IMAGE_TAG
       type: string
       default: latest
-      description: Tag de l'image Docker
   
   workspaces:
     - name: shared-workspace
-      description: Workspace partagé entre les tasks
   
   tasks:
-    # Task 1: Clone le code source
     - name: fetch-app-repository
       taskRef:
         name: git-clone-restricted
@@ -217,7 +207,6 @@ spec:
         - name: output
           workspace: shared-workspace
     
-    # Task 2: Exécuter les tests
     - name: run-tests
       taskRef:
         name: run-tests
@@ -227,7 +216,6 @@ spec:
         - name: source
           workspace: shared-workspace
     
-    # Task 3: Build et push l'image Docker
     - name: build-push-image
       taskRef:
         name: build-image
@@ -240,7 +228,6 @@ spec:
         - name: source
           workspace: shared-workspace
     
-    # Task 4: Mettre à jour les manifests
     - name: update-deployment-manifest
       taskRef:
         name: update-manifest

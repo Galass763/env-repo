@@ -1,0 +1,122 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-simple
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  steps:
+    - name: cleanup
+      image: busybox
+      script: |
+        #!/bin/sh
+        set -ex
+        rm -rf $(workspaces.output.path)/source || true
+    - name: clone
+      image: alpine/git
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        git clone $(params.url) source
+        cd source
+        git checkout $(params.revision)
+        ls -la
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-tests
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: test
+      image: python:3.9
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest 
+        pytest --maxfail=1 --disable-warnings --tb=short
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-and-push
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: IMAGE
+      type: string
+      description: Nom complet de l'image (docker.io/user/app:tag)
+  workspaces:
+    - name: source
+  steps:
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:v1.12.0
+      env:
+        - name: DOCKER_CONFIG
+          value: /tekton/home/.docker
+      args:
+        - --dockerfile=$(workspaces.source.path)/source/Dockerfile
+        - --context=$(workspaces.source.path)/source
+        - --destination=$(params.IMAGE)
+        - --insecure
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-and-deploy
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: APP_REPO
+      type: string
+    - name: IMAGE_NAME
+      type: string
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone-simple
+      params:
+        - name: url
+          value: $(params.APP_REPO)
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+    - name: run-tests
+      taskRef:
+        name: run-tests
+      runAfter:
+        - clone-repo
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+    - name: build-and-push
+      taskRef:
+        name: build-and-push
+      runAfter:
+        - run-tests
+      params:
+        - name: IMAGE
+          value: $(params.IMAGE_NAME)
+      workspaces:
+        - name: source
+          workspace: shared-workspace

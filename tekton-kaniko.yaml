@@ -1,0 +1,99 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-simple
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  steps:
+    - name: clone
+      image: alpine/git
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        git clone $(params.url) source
+        cd source
+        git checkout $(params.revision)
+        ls -la
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-image-kaniko
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: IMAGE
+      type: string
+      description: "Image complète (docker.io/user/app:tag)"
+    - name: DOCKERFILE
+      type: string
+      default: Dockerfile
+  steps:
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:v1.9.0
+      env:
+        - name: DOCKER_CONFIG
+          value: /kaniko/.docker
+      args:
+        - --dockerfile=$(workspaces.source.path)/source/$(params.DOCKERFILE)
+        - --context=$(workspaces.source.path)/source
+        - --destination=$(params.IMAGE)
+        - --cache=true
+        - --compressed-caching=false
+      volumeMounts:
+        - name: docker-config
+          mountPath: /kaniko/.docker
+  volumes:
+    - name: docker-config
+      secret:
+        secretName: docker-credentials
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-and-deploy-kaniko
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: APP_REPO
+      type: string
+    - name: IMAGE_NAME
+      type: string
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone-simple
+      params:
+        - name: url
+          value: $(params.APP_REPO)
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+    - name: build-image
+      taskRef:
+        name: build-image-kaniko
+      params:
+        - name: IMAGE
+          value: $(params.IMAGE_NAME)
+      workspaces:
+        - name: source
+          workspace: shared-workspace

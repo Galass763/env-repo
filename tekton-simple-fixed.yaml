@@ -1,0 +1,55 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-simple
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  steps:
+    - name: cleanup
+      image: alpine
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        rm -rf source || true
+    - name: clone
+      image: alpine/git
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        git clone $(params.url) source
+        cd source
+        git checkout $(params.revision)
+        ls -la
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: simple-pipeline
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: APP_REPO
+      type: string
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone-simple
+      params:
+        - name: url
+          value: $(params.APP_REPO)
+      workspaces:
+        - name: output
+          workspace: shared-workspace

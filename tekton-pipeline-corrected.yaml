@@ -1,0 +1,198 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-simple
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  steps:
+    - name: cleanup
+      image: alpine
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        rm -rf source
+    - name: clone
+      image: alpine/git
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -ex
+        git clone $(params.url) source
+        cd source
+        git checkout $(params.revision)
+        ls -la
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-tests
+  namespace: tekton-pipelines
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: test
+      image: python:3.9-slim
+      workingDir: $(workspaces.source.path)/source
+      script: |
+        #!/bin/bash
+        set -e
+        
+        echo "📂 Current directory:"
+        pwd
+        echo "📂 Files:"
+        ls -la
+        
+        echo "📦 Installing dependencies from src/requirements.txt..."
+        pip install --quiet --no-cache-dir -r src/requirements.txt
+        pip install --quiet pytest pytest-cov
+        
+        echo "🧪 Running tests..."
+        python -m pytest tests/ -v --cov=src
+        
+        echo "✅ Tests passed!"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-image
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: IMAGE
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:v1.9.0
+      env:
+        - name: DOCKER_CONFIG
+          value: /kaniko/.docker
+      args:
+        - --dockerfile=$(workspaces.source.path)/source/Dockerfile
+        - --context=$(workspaces.source.path)/source
+        - --destination=$(params.IMAGE)
+        - --cache=true
+        - --skip-tls-verify
+        - --insecure
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: update-manifest
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: IMAGE
+      type: string
+    - name: GIT_REPO
+      type: string
+    - name: MANIFEST_PATH
+      type: string
+      default: manifests/deployment.yaml
+  workspaces:
+    - name: source
+  steps:
+    - name: update
+      image: alpine/git
+      script: |
+        #!/bin/sh
+        set -e
+        
+        echo "📦 Cloning env-repo..."
+        git clone $(params.GIT_REPO) /tmp/env-repo
+        cd /tmp/env-repo
+        
+        echo "⚙️ Configuring git..."
+        git config user.email "tekton@example.com"
+        git config user.name "Tekton Pipeline"
+        
+        echo "🔄 Updating image in $(params.MANIFEST_PATH)..."
+        sed -i "s|image:.*nginx.*|image: $(params.IMAGE)|g" $(params.MANIFEST_PATH)
+        
+        echo "📝 Changes:"
+        git diff
+        
+        echo "💾 Committing..."
+        git add .
+        git commit -m "Update image to $(params.IMAGE)" || echo "No changes"
+        
+        echo "⬆️ Pushing..."
+        git push origin main || echo "Push may need auth"
+        
+        echo "✅ Done!"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: simple-pipeline
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: APP_REPO
+      type: string
+    - name: ENV_REPO
+      type: string
+    - name: IMAGE_NAME
+      type: string
+    - name: IMAGE_TAG
+      type: string
+      default: v1.0.0
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone-simple
+      params:
+        - name: url
+          value: $(params.APP_REPO)
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+    
+    - name: run-tests
+      taskRef:
+        name: run-tests
+      runAfter:
+        - clone-repo
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+    
+    - name: build-image
+      taskRef:
+        name: build-image
+      runAfter:
+        - run-tests
+      params:
+        - name: IMAGE
+          value: "$(params.IMAGE_NAME):$(params.IMAGE_TAG)"
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+    
+    - name: update-manifest
+      taskRef:
+        name: update-manifest
+      runAfter:
+        - build-image
+      params:
+        - name: IMAGE
+          value: "$(params.IMAGE_NAME):$(params.IMAGE_TAG)"
+        - name: GIT_REPO
+          value: $(params.ENV_REPO)
+      workspaces:
+        - name: source
+          workspace: shared-workspace

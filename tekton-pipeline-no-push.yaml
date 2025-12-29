@@ -1,0 +1,20 @@
+---
+# ... (garder les tasks git-clone, run-tests, update-manifest)
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-image-no-push
+  namespace: tekton-pipelines
+spec:
+  description: Build image sans push (pour test)
+  workspaces:
+    - name: source
+  steps:
+    - name: build-only
+      image: gcr.io/kaniko-project/executor:v1.9.0
+      args:
+        - --dockerfile=$(workspaces.source.path)/source/Dockerfile
+        - --context=$(workspaces.source.path)/source
+        - --no-push
+        - --destination=myapp:latest

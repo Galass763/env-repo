@@ -1,0 +1,16 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: test-simple-
+  namespace: tekton-pipelines
+spec:
+  pipelineRef:
+    name: simple-pipeline
+  params:
+    - name: APP_REPO
+      value: "https://github.com/Galass763/app-repo.git"
+  workspaces:
+    - name: shared-workspace
+      persistentVolumeClaim:
+        claimName: workspace-pvc
+
